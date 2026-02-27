@@ -1,0 +1,59 @@
+{
+  "name": "prompt-weave",
+  "displayName": "Prompt Weave",
+  "description": "Assemble .github/copilot-instructions.md from reusable Markdown snippets",
+  "version": "0.1.0",
+  "publisher": "andre",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "copilot",
+    "instructions",
+    "snippets",
+    "prompt"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "promptWeave.regenerate",
+        "title": "Prompt Weave: Regenerate Instructions"
+      }
+    ],
+    "configuration": {
+      "title": "Prompt Weave",
+      "properties": {
+        "promptWeave.regenerateOnOpen": {
+          "type": "boolean",
+          "default": true,
+          "description": "Auto-regenerate copilot-instructions.md on workspace open."
+        },
+        "promptWeave.include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Names of snippets to include, in order. Use the Add/Remove commands rather than editing this directly."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.95.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
