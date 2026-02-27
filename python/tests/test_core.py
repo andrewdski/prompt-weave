@@ -31,7 +31,7 @@ class TestLoadSnippet:
         workspace_snippets = tmp_path / "workspace" / ".prompt-weave" / "snippets"
         write_snippet(builtin, "base", "Base content")
 
-        result = load_snippet("base", builtin, workspace_snippets)
+        result = load_snippet("base", [workspace_snippets, builtin])
         assert result == "Base content"
 
     def test_workspace_overrides_builtin(self, tmp_path: Path) -> None:
@@ -40,19 +40,19 @@ class TestLoadSnippet:
         write_snippet(builtin, "base", "Builtin content")
         write_snippet(workspace_snippets, "base", "Workspace content")
 
-        result = load_snippet("base", builtin, workspace_snippets)
+        result = load_snippet("base", [workspace_snippets, builtin])
         assert result == "Workspace content"
 
     def test_missing_returns_none(self, tmp_path: Path) -> None:
         builtin = tmp_path / "builtin"
         builtin.mkdir()
-        result = load_snippet("nonexistent", builtin, tmp_path / "nope")
+        result = load_snippet("nonexistent", [builtin])
         assert result is None
 
     def test_front_matter_stripped(self, tmp_path: Path) -> None:
         builtin = tmp_path / "builtin"
         write_snippet(builtin, "base", "## Rules\n\nBe concise.")
-        result = load_snippet("base", builtin, tmp_path / "nope")
+        result = load_snippet("base", [builtin])
         assert result is not None
         assert "---" not in result
         assert "## Rules" in result
@@ -119,7 +119,7 @@ class TestRegenerate:
         assert text.index(SEPARATOR) < text.index("My notes")
         assert text.index(SEPARATOR) > text.index("Generated")
 
-    def test_empty_include_writes_separator_only(self, tmp_path: Path) -> None:
+    def test_empty_include_does_not_create_file(self, tmp_path: Path) -> None:
         workspace = tmp_path / "workspace"
         builtin = tmp_path / "builtin"
         builtin.mkdir()
@@ -127,9 +127,72 @@ class TestRegenerate:
         regenerate(workspace, builtin, [])
 
         output = workspace / ".github" / "copilot-instructions.md"
-        assert output.exists()
-        text = output.read_text(encoding="utf-8")
+        assert not output.exists()
+
+    def test_empty_include_removes_separator_keeps_user_content(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "workspace"
+        builtin = tmp_path / "builtin"
+        builtin.mkdir()
+
+        output_path = workspace / ".github" / "copilot-instructions.md"
+        output_path.parent.mkdir(parents=True)
+        output_path.write_text(
+            f"## Generated\n\n{SEPARATOR}\n\nMy custom notes.\n",
+            encoding="utf-8",
+        )
+
+        regenerate(workspace, builtin, [])
+
+        text = output_path.read_text(encoding="utf-8")
+        assert "My custom notes." in text
+        assert SEPARATOR not in text
+
+    def test_empty_include_deletes_file_when_no_user_content(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "workspace"
+        builtin = tmp_path / "builtin"
+        builtin.mkdir()
+
+        output_path = workspace / ".github" / "copilot-instructions.md"
+        output_path.parent.mkdir(parents=True)
+        output_path.write_text(
+            f"## Generated\n\n{SEPARATOR}\n",
+            encoding="utf-8",
+        )
+
+        regenerate(workspace, builtin, [])
+
+        assert not output_path.exists()
+
+    def test_empty_include_leaves_file_without_separator_untouched(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "workspace"
+        builtin = tmp_path / "builtin"
+        builtin.mkdir()
+
+        output_path = workspace / ".github" / "copilot-instructions.md"
+        output_path.parent.mkdir(parents=True)
+        original = "My hand-written instructions.\n"
+        output_path.write_text(original, encoding="utf-8")
+
+        regenerate(workspace, builtin, [])
+
+        assert output_path.read_text(encoding="utf-8") == original
+
+    def test_nonempty_include_preserves_existing_file_as_user_content(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "workspace"
+        builtin = tmp_path / "builtin"
+        write_snippet(builtin, "base", "## Base")
+
+        output_path = workspace / ".github" / "copilot-instructions.md"
+        output_path.parent.mkdir(parents=True)
+        output_path.write_text("My old instructions.\n", encoding="utf-8")
+
+        regenerate(workspace, builtin, ["base"])
+
+        text = output_path.read_text(encoding="utf-8")
+        assert "## Base" in text
         assert SEPARATOR in text
+        assert "My old instructions." in text
+        assert text.index(SEPARATOR) < text.index("My old instructions.")
 
     def test_multiple_snippets_concatenated_in_order(self, tmp_path: Path) -> None:
         workspace = tmp_path / "workspace"
@@ -142,27 +205,25 @@ class TestRegenerate:
         text = (workspace / ".github" / "copilot-instructions.md").read_text(encoding="utf-8")
         assert text.index("## Base") < text.index("## Docker")
 
-    def test_missing_snippet_warns_and_continues(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_missing_snippet_raises_after_writing(self, tmp_path: Path) -> None:
         workspace = tmp_path / "workspace"
         builtin = tmp_path / "builtin"
         write_snippet(builtin, "base", "## Base")
 
-        regenerate(workspace, builtin, ["base", "ghost"])
+        with pytest.raises(RuntimeError, match="ghost"):
+            regenerate(workspace, builtin, ["base", "ghost"])
 
-        captured = capsys.readouterr()
-        assert "ghost" in captured.err
+        # File should still have been written with the found snippets
         text = (workspace / ".github" / "copilot-instructions.md").read_text(encoding="utf-8")
         assert "## Base" in text
 
     def test_github_dir_created_automatically(self, tmp_path: Path) -> None:
         workspace = tmp_path / "workspace"
         builtin = tmp_path / "builtin"
-        builtin.mkdir()
+        write_snippet(builtin, "base", "## Base")
 
         assert not (workspace / ".github").exists()
-        regenerate(workspace, builtin, [])
+        regenerate(workspace, builtin, ["base"])
         assert (workspace / ".github" / "copilot-instructions.md").exists()
 
     def test_idempotent_regeneration(self, tmp_path: Path) -> None:

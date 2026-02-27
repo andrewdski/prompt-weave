@@ -47,7 +47,7 @@ def main() -> None:
 
     if args.command == "regenerate":
         try:
-            regenerate(
+            included = regenerate(
                 workspace=args.workspace,
                 builtin_snippets_dir=args.builtin_snippets,
                 include=args.include,
@@ -55,6 +55,10 @@ def main() -> None:
         except Exception as exc:  # noqa: BLE001
             print(f"Error: {exc}", file=sys.stderr)
             sys.exit(1)
+        else:
+            if included:
+                names = ", ".join(included)
+                print(f"Regenerated with {len(included)} snippet(s): {names}")
 
 
 if __name__ == "__main__":

@@ -22,17 +22,12 @@ def _strip_frontmatter(path: Path) -> str:
     return str(post.content)
 
 
-def load_snippet(name: str, builtin_dir: Path, workspace_snippets_dir: Path) -> Optional[str]:
+def load_snippet(name: str, search_dirs: list[Path]) -> Optional[str]:
     """Return the body of the first snippet file found for *name*.
 
-    Search order (highest priority first):
-      1. Workspace:  <workspace>/.prompt-weave/snippets/<name>.md
-      2. User:       ~/.prompt-weave/snippets/<name>.md
-      3. Built-in:   <extension>/snippets/<name>.md
-
-    Returns None if the snippet is not found in any tier.
+    Searches *search_dirs* in order; first match wins.
+    Returns None if the snippet is not found in any directory.
     """
-    search_dirs = [workspace_snippets_dir, USER_SNIPPETS_DIR, builtin_dir]
     for directory in search_dirs:
         candidate = directory / f"{name}.md"
         if candidate.exists():
@@ -44,7 +39,7 @@ def regenerate(
     workspace: Path,
     builtin_snippets_dir: Path,
     include: list[str],
-) -> None:
+) -> list[str]:
     """Assemble and write .github/copilot-instructions.md for *workspace*.
 
     1. Resolve each snippet name in *include* order.
@@ -56,32 +51,42 @@ def regenerate(
     workspace_snippets_dir = workspace / ".prompt-weave" / "snippets"
     output_path = workspace / ".github" / "copilot-instructions.md"
 
-    # --- Build generated section ------------------------------------------
-    bodies: list[str] = []
-    missing: list[str] = []
-
-    for name in include:
-        content = load_snippet(name, builtin_snippets_dir, workspace_snippets_dir)
-        if content is None:
-            missing.append(name)
-        else:
-            bodies.append(content.strip())
-
-    if missing:
-        print(
-            f"Warning: the following snippets were not found and were skipped: "
-            f"{', '.join(missing)}",
-            file=sys.stderr,
-        )
-
-    generated_section = "\n\n".join(bodies)
-
-    # --- Preserve user content below separator ----------------------------
+    # --- Extract existing user content below separator --------------------
     user_section = ""
     if output_path.exists():
         existing = output_path.read_text(encoding="utf-8")
         if SEPARATOR in existing:
-            user_section = existing.split(SEPARATOR, 1)[1]
+            user_section = existing.split(SEPARATOR, 1)[1].strip()
+        else:
+            # No separator — entire file is user content
+            user_section = existing.strip()
+
+    # --- Empty include: revert to plain user file -------------------------
+    if not include:
+        if output_path.exists() and SEPARATOR in output_path.read_text(encoding="utf-8"):
+            if user_section:
+                output_path.write_text(user_section + "\n", encoding="utf-8")
+            else:
+                output_path.unlink()
+        return []
+
+    # Search order: workspace (highest priority) → user home → built-in
+    search_dirs = [workspace_snippets_dir, USER_SNIPPETS_DIR, builtin_snippets_dir]
+
+    # --- Build generated section ------------------------------------------
+    bodies: list[str] = []
+    included: list[str] = []
+    missing: list[str] = []
+
+    for name in include:
+        content = load_snippet(name, search_dirs)
+        if content is None:
+            missing.append(name)
+        else:
+            included.append(name)
+            bodies.append(content.strip())
+
+    generated_section = "\n\n".join(bodies)
 
     # --- Assemble output --------------------------------------------------
     parts: list[str] = []
@@ -92,13 +97,20 @@ def regenerate(
 
     parts.append(SEPARATOR)
 
-    stripped_user = user_section.strip()
-    if stripped_user:
+    if user_section:
         parts.append("")          # blank line after separator
-        parts.append(stripped_user)
+        parts.append(user_section)
 
     output = "\n".join(parts) + "\n"
 
     # --- Write ------------------------------------------------------------
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(output, encoding="utf-8")
+
+    if missing:
+        raise RuntimeError(
+            f"Regenerated, but the following snippets were not found: "
+            f"{', '.join(missing)}"
+        )
+
+    return included

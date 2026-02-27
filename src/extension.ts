@@ -27,12 +27,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
         try {
             const output = await runPythonCore(context.extensionPath, args);
-            if (output.trim()) {
-                // Surface any warnings from the Python process
-                vscode.window.showWarningMessage(`Prompt Weave: ${output.trim()}`);
-            } else {
-                vscode.window.showInformationMessage('Prompt Weave: Instructions regenerated.');
-            }
+            const message = output.trim() || 'Instructions regenerated.';
+            vscode.window.showInformationMessage(`Prompt Weave: ${message}`);
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err);
             vscode.window.showErrorMessage(`Prompt Weave: ${msg}`);
@@ -45,7 +41,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     const config = vscode.workspace.getConfiguration('promptWeave');
     if (config.get<boolean>('regenerateOnOpen') === true) {
-        await regenerate();
+        const include = config.get<string[]>('include') ?? [];
+        if (include.length > 0) {
+            await regenerate();
+        }
     }
 }
 
