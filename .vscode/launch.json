@@ -6,7 +6,11 @@
       "type": "extensionHost",
       "request": "launch",
       "args": [
-        "--extensionDevelopmentPath=${workspaceFolder}"
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        // Disable Copilot extensions in the dev host to prevent an unhandled
+        // rejection from the Copilot Chat Ollama integration on startup.
+        "--disable-extension", "github.copilot",
+        "--disable-extension", "github.copilot-chat"
       ],
       "outFiles": [
         "${workspaceFolder}/out/**/*.js"
