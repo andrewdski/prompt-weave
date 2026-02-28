@@ -4,6 +4,11 @@
   "description": "Assemble .github/copilot-instructions.md from reusable Markdown snippets",
   "version": "0.1.0",
   "publisher": "andre",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andrewdski/prompt-weave.git"
+  },
   "engines": {
     "vscode": "^1.95.0"
   },
