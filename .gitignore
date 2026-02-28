@@ -8,3 +8,4 @@ python/**/__pycache__/
 python/**/*.pyc
 python/.pytest_cache/
 python/**/.pytest_cache/
+python/.coverage
