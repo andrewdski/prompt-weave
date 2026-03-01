@@ -42,7 +42,7 @@ from pathlib import Path
 
 import pytest
 
-from prompt_weave.core import SEPARATOR, load_snippet, regenerate
+from prompt_weave.core import SEPARATOR, check_gitignore, load_snippet, regenerate
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -549,3 +549,49 @@ class TestRegenerate:
         text = (workspace / ".github" / "copilot-instructions.md").read_text(encoding="utf-8")
         assert "## Base" in text
         assert SEPARATOR in text
+
+
+# ── check_gitignore ────────────────────────────────────────────────────────
+
+class TestCheckGitignore:
+    TARGET = ".github/copilot-instructions.md"
+
+    def test_no_gitignore_returns_warning(self, tmp_path: Path) -> None:
+        """No .gitignore file → warning returned."""
+        warnings = check_gitignore(tmp_path)
+        assert len(warnings) == 1
+        assert self.TARGET in warnings[0]
+
+    def test_gitignore_with_exact_path_returns_no_warning(self, tmp_path: Path) -> None:
+        """`.gitignore` containing the exact path → no warning."""
+        (tmp_path / ".gitignore").write_text(".github/copilot-instructions.md\n", encoding="utf-8")
+        assert check_gitignore(tmp_path) == []
+
+    def test_gitignore_with_filename_only_returns_no_warning(self, tmp_path: Path) -> None:
+        """`copilot-instructions.md` on its own line → no warning."""
+        (tmp_path / ".gitignore").write_text("copilot-instructions.md\n", encoding="utf-8")
+        assert check_gitignore(tmp_path) == []
+
+    def test_gitignore_with_github_dir_returns_no_warning(self, tmp_path: Path) -> None:
+        """`.github/` directory entry → no warning."""
+        (tmp_path / ".gitignore").write_text(".github/\n", encoding="utf-8")
+        assert check_gitignore(tmp_path) == []
+
+    def test_gitignore_without_matching_entry_returns_warning(self, tmp_path: Path) -> None:
+        """`.gitignore` exists but has no matching entry → warning."""
+        (tmp_path / ".gitignore").write_text("node_modules/\n*.log\n", encoding="utf-8")
+        warnings = check_gitignore(tmp_path)
+        assert len(warnings) == 1
+        assert self.TARGET in warnings[0]
+
+    def test_gitignore_with_comments_and_blank_lines_ignored(self, tmp_path: Path) -> None:
+        """Comment and blank lines in .gitignore do not count as a match."""
+        content = "# copilot-instructions.md is intentionally tracked\n\n*.log\n"
+        (tmp_path / ".gitignore").write_text(content, encoding="utf-8")
+        warnings = check_gitignore(tmp_path)
+        assert len(warnings) == 1
+
+    def test_gitignore_entry_with_surrounding_whitespace(self, tmp_path: Path) -> None:
+        """Entry with surrounding whitespace is still recognised."""
+        (tmp_path / ".gitignore").write_text("  .github/copilot-instructions.md  \n", encoding="utf-8")
+        assert check_gitignore(tmp_path) == []

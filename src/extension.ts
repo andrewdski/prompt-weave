@@ -27,8 +27,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
         try {
             const output = await runPythonCore(context.extensionPath, args);
-            const message = output.trim() || 'Instructions regenerated.';
+            const lines = output.trim().split('\n');
+            const warningLines = lines.filter(l => l.startsWith('Warning: '));
+            const infoLines = lines.filter(l => !l.startsWith('Warning: '));
+            const message = infoLines.join('\n').trim() || 'Instructions regenerated.';
             vscode.window.showInformationMessage(`Prompt Weave: ${message}`);
+            for (const w of warningLines) {
+                vscode.window.showWarningMessage(`Prompt Weave: ${w.replace(/^Warning: /, '')}`);
+            }
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err);
             vscode.window.showErrorMessage(`Prompt Weave: ${msg}`);

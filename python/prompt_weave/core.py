@@ -114,3 +114,37 @@ def regenerate(
         )
 
     return included
+
+
+def check_gitignore(workspace: Path) -> list[str]:
+    """Return warning messages if .github/copilot-instructions.md is not git-ignored.
+
+    Checks whether the workspace's .gitignore exists and contains an entry
+    covering ``.github/copilot-instructions.md``.  Returns a list with a
+    single warning string when the file may be tracked by Git, or an empty
+    list when everything looks fine.
+    """
+    output_rel = ".github/copilot-instructions.md"
+    gitignore_path = workspace / ".gitignore"
+
+    if not gitignore_path.exists():
+        return [
+            f"{output_rel} may be tracked by Git: "
+            "no .gitignore found in the workspace."
+        ]
+
+    lines = gitignore_path.read_text(encoding="utf-8").splitlines()
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+    # Intentionally simple: check only the most common literal patterns that
+    # cover the file.  `.github/` correctly covers all files under that
+    # directory in gitignore semantics (trailing slash means "match as dir").
+    if stripped in (output_rel, "copilot-instructions.md", ".github/"):
+            return []
+
+    return [
+        f"{output_rel} may be tracked by Git: "
+        "add an entry to .gitignore to suppress this warning."
+    ]
