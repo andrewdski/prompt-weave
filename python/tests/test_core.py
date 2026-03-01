@@ -291,6 +291,22 @@ class TestRegenerate:
         text = (workspace / ".github" / "copilot-instructions.md").read_text(encoding="utf-8")
         assert text.index("## Base") < text.index("## Docker")
 
+    def test_includes_line_directive_comments_per_snippet(self, tmp_path: Path) -> None:
+        """Each included snippet is preceded by a #line-style provenance comment."""
+        workspace = tmp_path / "workspace"
+        builtin = tmp_path / "builtin"
+        write_snippet(builtin, "base", "## Base")
+        write_snippet(builtin, "docker", "## Docker")
+
+        regenerate(workspace, builtin, ["base", "docker"])
+
+        text = (workspace / ".github" / "copilot-instructions.md").read_text(encoding="utf-8")
+        assert '<!-- prompt-weave:line ' in text
+        assert '"builtin:base.md" -->' in text
+        assert '"builtin:docker.md" -->' in text
+        assert text.index('"builtin:base.md" -->') < text.index("## Base")
+        assert text.index('"builtin:docker.md" -->') < text.index("## Docker")
+
     def test_missing_snippet_raises_after_writing(self, tmp_path: Path) -> None:
         workspace = tmp_path / "workspace"
         builtin = tmp_path / "builtin"

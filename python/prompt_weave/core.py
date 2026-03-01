@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import NamedTuple
 from typing import Optional
 
 import frontmatter
@@ -16,10 +17,70 @@ SEPARATOR = "<!-- prompt-weave:generated - do not edit above this line -->"
 USER_SNIPPETS_DIR = Path.home() / ".prompt-weave" / "snippets"
 
 
+class ResolvedSnippet(NamedTuple):
+    """Resolved snippet content and provenance metadata."""
+
+    content: str
+    source_label: str
+    source_line: int
+
+
 def _strip_frontmatter(path: Path) -> str:
     """Load a Markdown file and return only the content (front matter stripped)."""
     post = frontmatter.load(str(path))
     return str(post.content)
+
+
+def _content_start_line(path: Path) -> int:
+    """Return 1-based line where snippet body starts in a Markdown file."""
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+
+    if lines and lines[0].strip() == "---":
+        for index, line in enumerate(lines[1:], start=2):
+            if line.strip() == "---":
+                return index + 1
+
+    return 1
+
+
+def _source_label(
+    directory: Path,
+    candidate: Path,
+    workspace_snippets_dir: Path,
+    builtin_snippets_dir: Path,
+) -> str:
+    """Return stable source label used in generated line directives."""
+    if directory == workspace_snippets_dir:
+        return f"workspace:{candidate.name}"
+    if directory == USER_SNIPPETS_DIR:
+        return f"user:{candidate.name}"
+    if directory == builtin_snippets_dir:
+        return f"builtin:{candidate.name}"
+    return candidate.name
+
+
+def resolve_snippet(
+    name: str,
+    search_dirs: list[Path],
+    workspace_snippets_dir: Path,
+    builtin_snippets_dir: Path,
+) -> Optional[ResolvedSnippet]:
+    """Resolve a snippet and include provenance metadata for generation."""
+    for directory in search_dirs:
+        candidate = directory / f"{name}.md"
+        if candidate.exists():
+            return ResolvedSnippet(
+                content=_strip_frontmatter(candidate),
+                source_label=_source_label(
+                    directory=directory,
+                    candidate=candidate,
+                    workspace_snippets_dir=workspace_snippets_dir,
+                    builtin_snippets_dir=builtin_snippets_dir,
+                ),
+                source_line=_content_start_line(candidate),
+            )
+    return None
 
 
 def load_snippet(name: str, search_dirs: list[Path]) -> Optional[str]:
@@ -79,12 +140,24 @@ def regenerate(
     missing: list[str] = []
 
     for name in include:
-        content = load_snippet(name, search_dirs)
-        if content is None:
+        resolved = resolve_snippet(
+            name=name,
+            search_dirs=search_dirs,
+            workspace_snippets_dir=workspace_snippets_dir,
+            builtin_snippets_dir=builtin_snippets_dir,
+        )
+        if resolved is None:
             missing.append(name)
         else:
             included.append(name)
-            bodies.append(content.strip())
+            body = resolved.content.strip()
+            directive = (
+                f'<!-- prompt-weave:line {resolved.source_line} "{resolved.source_label}" -->'
+            )
+            if body:
+                bodies.append(f"{directive}\n{body}")
+            else:
+                bodies.append(directive)
 
     generated_section = "\n\n".join(bodies)
 
