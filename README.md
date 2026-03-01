@@ -39,7 +39,7 @@ Under active development — V1 (core functionality) in progress.
 | User | `~/.prompt-weave/snippets/` | Middle |
 | Built-in | `<extension>/snippets/` | Lowest |
 
-Built-in snippets: `base`, `docker`, `python`, `powershell`.
+Built-in snippets: `base`, `git`, `docker`, `python`, `powershell`.
 
 ## Development
 
