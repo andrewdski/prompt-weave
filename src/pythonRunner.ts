@@ -37,7 +37,7 @@ export function runPythonCore(extensionPath: string, args: string[]): Promise<Py
 
         proc.on('close', (code: number | null) => {
             if (code === 0) {
-                const lines = stdout.trim().split(/\r?\n/).filter(l => l.length > 0);
+                const lines = stdout.split(/\r?\n/);
                 const warnings = lines
                     .filter(l => l.startsWith('Warning: '))
                     .map(l => l.slice('Warning: '.length));

@@ -38,6 +38,7 @@ regenerate
 
 from __future__ import annotations
 
+import subprocess as _subprocess
 from pathlib import Path
 
 import pytest
@@ -552,9 +553,6 @@ class TestRegenerate:
 
 
 # ── check_gitignore ────────────────────────────────────────────────────────
-
-import subprocess as _subprocess
-
 
 def _git_available() -> bool:
     try:
