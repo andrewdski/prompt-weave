@@ -38,11 +38,12 @@ regenerate
 
 from __future__ import annotations
 
+import subprocess as _subprocess
 from pathlib import Path
 
 import pytest
 
-from prompt_weave.core import SEPARATOR, load_snippet, regenerate
+from prompt_weave.core import SEPARATOR, check_gitignore, load_snippet, regenerate
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -290,6 +291,22 @@ class TestRegenerate:
 
         text = (workspace / ".github" / "copilot-instructions.md").read_text(encoding="utf-8")
         assert text.index("## Base") < text.index("## Docker")
+
+    def test_includes_line_directive_comments_per_snippet(self, tmp_path: Path) -> None:
+        """Each included snippet is preceded by a #line-style provenance comment."""
+        workspace = tmp_path / "workspace"
+        builtin = tmp_path / "builtin"
+        write_snippet(builtin, "base", "## Base")
+        write_snippet(builtin, "docker", "## Docker")
+
+        regenerate(workspace, builtin, ["base", "docker"])
+
+        text = (workspace / ".github" / "copilot-instructions.md").read_text(encoding="utf-8")
+        assert '<!-- prompt-weave:line ' in text
+        assert '"builtin:base.md" -->' in text
+        assert '"builtin:docker.md" -->' in text
+        assert text.index('"builtin:base.md" -->') < text.index("## Base")
+        assert text.index('"builtin:docker.md" -->') < text.index("## Docker")
 
     def test_missing_snippet_raises_after_writing(self, tmp_path: Path) -> None:
         workspace = tmp_path / "workspace"
@@ -549,3 +566,67 @@ class TestRegenerate:
         text = (workspace / ".github" / "copilot-instructions.md").read_text(encoding="utf-8")
         assert "## Base" in text
         assert SEPARATOR in text
+
+
+# ── check_gitignore ────────────────────────────────────────────────────────
+
+def _git_available() -> bool:
+    try:
+        _subprocess.run(["git", "--version"], capture_output=True, check=True)
+        return True
+    except (FileNotFoundError, _subprocess.CalledProcessError):
+        return False
+
+
+pytestmark_git = pytest.mark.skipif(not _git_available(), reason="git not available")
+
+
+def _make_git_repo(path: Path) -> None:
+    """Initialise a bare-minimum git repository at *path*."""
+    _subprocess.run(["git", "init", str(path)], capture_output=True, check=True)
+    # Provide minimal identity so git doesn't complain in some environments
+    _subprocess.run(["git", "-C", str(path), "config", "user.email", "test@example.com"], capture_output=True, check=True)
+    _subprocess.run(["git", "-C", str(path), "config", "user.name", "Test"], capture_output=True, check=True)
+
+
+@pytestmark_git
+class TestCheckGitignore:
+    TARGET = ".github/copilot-instructions.md"
+
+    def test_not_a_git_repo_returns_no_warning(self, tmp_path: Path) -> None:
+        """Directory that is not a git repo → no warning (git check-ignore exits 128)."""
+        warnings = check_gitignore(tmp_path)
+        assert warnings == []
+
+    def test_git_repo_no_gitignore_returns_warning(self, tmp_path: Path) -> None:
+        """Git repo with no .gitignore → file would be tracked → warning returned."""
+        _make_git_repo(tmp_path)
+        warnings = check_gitignore(tmp_path)
+        assert len(warnings) == 1
+        assert self.TARGET in warnings[0]
+
+    def test_git_repo_gitignore_with_exact_path_returns_no_warning(self, tmp_path: Path) -> None:
+        """.gitignore with exact path → git confirms ignored → no warning."""
+        _make_git_repo(tmp_path)
+        (tmp_path / ".gitignore").write_text(".github/copilot-instructions.md\n", encoding="utf-8")
+        assert check_gitignore(tmp_path) == []
+
+    def test_git_repo_gitignore_with_github_dir_returns_no_warning(self, tmp_path: Path) -> None:
+        """.gitignore with .github/ directory entry → git confirms ignored → no warning."""
+        _make_git_repo(tmp_path)
+        (tmp_path / ".gitignore").write_text(".github/\n", encoding="utf-8")
+        assert check_gitignore(tmp_path) == []
+
+    def test_git_repo_gitignore_with_wildcard_returns_no_warning(self, tmp_path: Path) -> None:
+        """.gitignore with *.md wildcard → git confirms file is ignored → no warning."""
+        _make_git_repo(tmp_path)
+        (tmp_path / ".gitignore").write_text("*.md\n", encoding="utf-8")
+        assert check_gitignore(tmp_path) == []
+
+    def test_git_repo_gitignore_without_matching_entry_returns_warning(self, tmp_path: Path) -> None:
+        """.gitignore without a matching entry → git confirms not ignored → warning."""
+        _make_git_repo(tmp_path)
+        (tmp_path / ".gitignore").write_text("node_modules/\n*.log\n", encoding="utf-8")
+        warnings = check_gitignore(tmp_path)
+        assert len(warnings) == 1
+        assert self.TARGET in warnings[0]
