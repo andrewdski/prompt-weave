@@ -291,6 +291,22 @@ class TestRegenerate:
         text = (workspace / ".github" / "copilot-instructions.md").read_text(encoding="utf-8")
         assert text.index("## Base") < text.index("## Docker")
 
+    def test_includes_line_directive_comments_per_snippet(self, tmp_path: Path) -> None:
+        """Each included snippet is preceded by a #line-style provenance comment with sha256."""
+        workspace = tmp_path / "workspace"
+        builtin = tmp_path / "builtin"
+        write_snippet(builtin, "base", "## Base")
+        write_snippet(builtin, "docker", "## Docker")
+
+        regenerate(workspace, builtin, ["base", "docker"])
+
+        text = (workspace / ".github" / "copilot-instructions.md").read_text(encoding="utf-8")
+        assert '<!-- prompt-weave:line ' in text
+        assert '"builtin:base.md" sha256' in text
+        assert '"builtin:docker.md" sha256' in text
+        assert text.index('"builtin:base.md" sha256') < text.index("## Base")
+        assert text.index('"builtin:docker.md" sha256') < text.index("## Docker")
+
     def test_missing_snippet_raises_after_writing(self, tmp_path: Path) -> None:
         workspace = tmp_path / "workspace"
         builtin = tmp_path / "builtin"
@@ -549,3 +565,74 @@ class TestRegenerate:
         text = (workspace / ".github" / "copilot-instructions.md").read_text(encoding="utf-8")
         assert "## Base" in text
         assert SEPARATOR in text
+
+    # ── SHA-256 selective-update tests ────────────────────────────────────
+
+    def test_blob_header_includes_sha256(self, tmp_path: Path) -> None:
+        """Generated blob headers contain a 64-char lowercase sha256 hex digest."""
+        workspace = tmp_path / "workspace"
+        builtin = tmp_path / "builtin"
+        write_snippet(builtin, "base", "## Base")
+
+        regenerate(workspace, builtin, ["base"])
+
+        import re
+        text = (workspace / ".github" / "copilot-instructions.md").read_text(encoding="utf-8")
+        assert re.search(
+            r'<!-- prompt-weave:line \d+ "[^"]*" sha256 [0-9a-f]{64} -->', text
+        ), "Expected a blob header with sha256 digest"
+
+    def test_no_rewrite_when_sha_matches(self, tmp_path: Path) -> None:
+        """Repeated regeneration with unchanged sources does not rewrite the file."""
+        workspace = tmp_path / "workspace"
+        builtin = tmp_path / "builtin"
+        write_snippet(builtin, "base", "## Base")
+
+        regenerate(workspace, builtin, ["base"])
+        output_path = workspace / ".github" / "copilot-instructions.md"
+        mtime_after_first = output_path.stat().st_mtime_ns
+
+        regenerate(workspace, builtin, ["base"])
+        mtime_after_second = output_path.stat().st_mtime_ns
+
+        assert mtime_after_first == mtime_after_second, (
+            "File was rewritten on second call even though source did not change"
+        )
+
+    def test_rewrite_when_sha_differs(self, tmp_path: Path) -> None:
+        """Changing a source file causes the output file to be regenerated."""
+        workspace = tmp_path / "workspace"
+        builtin = tmp_path / "builtin"
+        write_snippet(builtin, "base", "## Base v1")
+
+        regenerate(workspace, builtin, ["base"])
+        output_path = workspace / ".github" / "copilot-instructions.md"
+        text_v1 = output_path.read_text(encoding="utf-8")
+        assert "## Base v1" in text_v1
+
+        # Overwrite the snippet with different content (new sha256)
+        write_snippet(builtin, "base", "## Base v2")
+
+        regenerate(workspace, builtin, ["base"])
+        text_v2 = output_path.read_text(encoding="utf-8")
+        assert "## Base v2" in text_v2
+        assert "## Base v1" not in text_v2
+
+    def test_rewrite_when_sha_missing(self, tmp_path: Path) -> None:
+        """An existing header without sha256 is treated as stale and regenerated."""
+        workspace = tmp_path / "workspace"
+        builtin = tmp_path / "builtin"
+        write_snippet(builtin, "base", "## Base")
+
+        output_path = workspace / ".github" / "copilot-instructions.md"
+        output_path.parent.mkdir(parents=True)
+        # Write an old-format header without sha256
+        output_path.write_text(
+            f'<!-- prompt-weave:line 4 "builtin:base.md" -->\n## Base\n\n{SEPARATOR}\n',
+            encoding="utf-8",
+        )
+
+        regenerate(workspace, builtin, ["base"])
+
+        text = output_path.read_text(encoding="utf-8")
+        assert 'sha256' in text, "Expected sha256 to be stamped after rewrite"
