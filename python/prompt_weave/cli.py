@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from .core import regenerate
+from .core import check_gitignore, regenerate
 
 
 def main() -> None:
@@ -56,6 +56,8 @@ def main() -> None:
             print(f"Error: {exc}", file=sys.stderr)
             sys.exit(1)
         else:
+            for warning in check_gitignore(args.workspace):
+                print(f"Warning: {warning}")
             if included:
                 names = ", ".join(included)
                 print(f"Regenerated with {len(included)} snippet(s): {names}")

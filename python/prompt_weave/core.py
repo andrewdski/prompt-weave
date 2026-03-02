@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import sys
+import subprocess
 from pathlib import Path
 from typing import Optional
 
@@ -114,3 +114,35 @@ def regenerate(
         )
 
     return included
+
+
+def check_gitignore(workspace: Path) -> list[str]:
+    """Return warning messages if .github/copilot-instructions.md is not git-ignored.
+
+    Uses ``git check-ignore`` to ask Git directly whether the generated file
+    would be ignored.  Returns an empty list when Git is unavailable, the
+    directory is not a Git repository, or the file is already covered by an
+    ignore rule.  Returns a one-element warning list when Git confirms the
+    file would be tracked.
+    """
+    output_rel = ".github/copilot-instructions.md"
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "-q", output_rel],
+            cwd=workspace,
+            capture_output=True,
+        )
+    except FileNotFoundError:
+        # git is not installed — nothing to warn about
+        return []
+
+    if result.returncode == 0:
+        # File is ignored by git — no warning needed
+        return []
+    if result.returncode == 1:
+        # File is NOT ignored by git — warn the user
+        return [
+            f"{output_rel} may be tracked by Git: add an entry to .gitignore to suppress this warning."
+        ]
+    # Any other exit code (e.g. 128 = not a git repository) — stay silent
+    return []
