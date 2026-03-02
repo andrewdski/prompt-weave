@@ -24,9 +24,3 @@ version: 1
 - Surface errors early; avoid swallowing them silently.
 - Prefer typed, descriptive errors over generic ones.
 - Never use exceptions for normal control flow.
-
-## Files and Commits
-
-- One logical change per commit.
-- Commit messages: imperative mood, ≤ 72 chars subject, blank line before body.
-- Keep files focused; one primary concept per file.

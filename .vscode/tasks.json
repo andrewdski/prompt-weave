@@ -4,10 +4,7 @@
     {
       "type": "npm",
       "script": "compile",
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      },
+      "group": "build",
       "label": "npm: compile",
       "problemMatcher": [
         "$tsc"
@@ -22,6 +19,22 @@
       "problemMatcher": [
         "$tsc-watch"
       ]
+    },
+    {
+      "label": "npm: version patch",
+      "type": "shell",
+      "command": "npm",
+      "args": ["version", "patch", "--no-git-tag-version"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "type": "npm",
+      "script": "package",
+      "group": "build",
+      "label": "npm: package",
+      "problemMatcher": [],
+      "dependsOn": ["npm: compile", "npm: version patch"]
     }
   ]
 }
