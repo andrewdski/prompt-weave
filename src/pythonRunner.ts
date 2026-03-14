@@ -1,8 +1,14 @@
 import * as cp from 'child_process';
 import * as path from 'path';
 
+export interface PythonOutput {
+    output: string;
+    warnings: string[];
+}
+
 /**
- * Invoke the Python core via `uv run` and return stdout as a string.
+ * Invoke the Python core via `uv run` and return stdout parsed into
+ * informational output and warning lines (prefixed with "Warning: ").
  * stderr is collected and thrown as an Error on non-zero exit.
  *
  * uv automatically:
@@ -10,7 +16,7 @@ import * as path from 'path';
  *  - creates / reuses a cached venv
  *  - installs dependencies declared in pyproject.toml
  */
-export function runPythonCore(extensionPath: string, args: string[]): Promise<string> {
+export function runPythonCore(extensionPath: string, args: string[]): Promise<PythonOutput> {
     return new Promise((resolve, reject) => {
         const pythonProjectDir = path.join(extensionPath, 'python');
 
@@ -31,7 +37,15 @@ export function runPythonCore(extensionPath: string, args: string[]): Promise<st
 
         proc.on('close', (code: number | null) => {
             if (code === 0) {
-                resolve(stdout);
+                const lines = stdout.split(/\r?\n/);
+                const warnings = lines
+                    .filter(l => l.startsWith('Warning: '))
+                    .map(l => l.slice('Warning: '.length));
+                const output = lines
+                    .filter(l => !l.startsWith('Warning: '))
+                    .join('\n')
+                    .trim();
+                resolve({ output, warnings });
             } else {
                 const detail = stderr.trim() || `Process exited with code ${code ?? 'null'}`;
                 reject(new Error(detail));

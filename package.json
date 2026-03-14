@@ -2,7 +2,7 @@
   "name": "prompt-weave",
   "displayName": "Prompt Weave",
   "description": "Assemble .github/copilot-instructions.md from reusable Markdown snippets",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "andre",
   "license": "MIT",
   "repository": {

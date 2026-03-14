@@ -34,7 +34,7 @@
       "group": "build",
       "label": "npm: package",
       "problemMatcher": [],
-      "dependsOn": ["npm: compile", "npm: version patch"]
+      "dependsOn": ["npm: compile"]
     }
   ]
 }
